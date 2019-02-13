@@ -18,6 +18,8 @@
     "homebridge": ">=0.2.0"
   },
   "dependencies": {
+    "http": "0.0.0",
+    "rachio": "^0.1.2",
     "request": "2.49.x"
   }
 }

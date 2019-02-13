@@ -1,118 +1,308 @@
 var request = require("request");
+var http = require('http');
+const RachioClient = require("rachio");
+
 var Service, Characteristic;
 
+var Accessory, Service, Characteristic, UUIDGen;
+
 module.exports = function(homebridge) {
-  Service = homebridge.hap.Service;
-  Characteristic = homebridge.hap.Characteristic;
-  Accessory = homebridge.hap.Accessory;
-  PlatformAccessory = homebridge.hap.PlatformAccessory;
+    console.log("homebridge API version: " + homebridge.version);
 
-  homebridge.registerPlatform("homebridge-rachio-sprinkler", "Rachio-Sprinkler", RachioPlatform);
+    // Accessory must be created from PlatformAccessory Constructor
+    Accessory = homebridge.platformAccessory;
+
+    // Service and Characteristic are from hap-nodejs
+    Service = homebridge.hap.Service;
+    Characteristic = homebridge.hap.Characteristic;
+    UUIDGen = homebridge.hap.uuid;
+
+    // For platform plugin to be considered as dynamic platform plugin,
+    // registerPlatform(pluginName, platformName, constructor, dynamic), dynamic must be true
+    homebridge.registerPlatform("homebridge-rachio-platform", "Rachio-Platform", RachioPlatform);
 }
 
-function RachioPlatform(log, config, api) {
+// Platform constructor
+// config may be null
+// api may be null if launched from old homebridge version
+class RachioPlatform {
+    constructor(log, config, api) {
+        log("RachioPlatform Init");
+        var platform = this;
+        this.log = log;
+        this.config = config;
+        this.accessories = [];
 
-  this.log = log;
-  this.config = config
-  this.api = api;
+        if (!this.config.api_key) {
+            this.log.error("api_key is required in order to communicate with the rachio API")
+        }
 
-  this.log("Setting Up Rachio");
-  
-  this.api_key = config["api_key"];
-  
-  this.log("Fetching Rachio devices...");
-}
+        this.client = new RachioClient(this.config.api_key);
 
-RachioPlatform.prototype.setupController = function() {
-    this.log("Fetching Rachio devices...");
-    const accessories = []
-    request.get({
-          url: "https://api.rach.io/1/public/person/info",
-          headers: { "Authorization": "Bearer " + this.api_key}
-        }, function(err, response, body) {
-            var json = JSON.parse(body);
-            this.person_id = json["id"]
-            request.get({
-                  url: "https://api.rach.io/1/public/person/" + this.person_id,
-                  headers: { "Authorization": "Bearer " + this.api_key}
-                }, function(err, response, body) {
-                    var json = JSON.parse(body);
-                    json["devices"].forEach(function (device) {
-                        this.log("Setting up Rachio Controller for " + device["name"] + " (" + device["id"] + ")")
-                        var rachioController = exports.accessories = new this.api.platformAccessory("Rachio Controller", device["id"]);
-
-                        var rachioControllerInformationService = rachioController.getService(Service.AccessoryInformation)
-                        rachioControllerInformationService.setCharacteristic(Characteristic.Name, device["name"])
-                        rachioControllerInformationService.setCharacteristic(Characteristic.Manufacturer, "Rachio")
-                        rachioControllerInformationService.setCharacteristic(Characteristic.Model, device["model"])
-                        rachioControllerInformationService.setCharacteristic(Characteristic.SerialNumber, device["serialNumber"])
-
-                        accessories.push(rachioController)
-                        device['zones'].forEach(function (zone) {
-                            if (zone["enabled"]) {
-                                this.log(zone["name"])
-                                var sprinkler = exports.accessory = new this.api.platformAccessory(zone["name"], zone["id"]);
-                                var sprinklerService = sprinkler.addService(Service.Valve, "Sprinkler", )
-                                sprinkler
-                                 .getService(Service.Valve)
-                                 .setCharacteristic(Characteristic.ValveType, "1")
-                                 .setCharacteristic(Characteristic.Name, zone["name"]);
-                                accessories.push(sprinkler)
+        if (this.config.external_webhook_address && this.config.internal_webhook_port) {
+            this.requestServer = http.createServer(function(request, response) {
+                if (request.method == "POST") {
+            
+                    let body = [];
+                    request.on('data', (chunk) => {
+                        body.push(chunk);
+                    }).on('end', () => {
+                        body = Buffer.concat(body).toString().trim();
+                        var jsonBody = JSON.parse(body);
+                        response.writeHead(204);
+                        response.end();
+                        this.log.debug(jsonBody)
+                        if (jsonBody.type == "ZONE_STATUS") {
+                            if (jsonBody.subType == "ZONE_STOPPED" || jsonBody.subType == "ZONE_COMPLETED") {
+                                this.log("Zone Stop Webhook Received for " + jsonBody.zoneId)
+                                this.updateZoneStopped(jsonBody.zoneId)
+                            } else if  (jsonBody.subType == "ZONE_STARTED") {
+                                this.log("Zone Started Webhook Received for " + jsonBody.zoneId + " for duration " + jsonBody.duration)
+                                this.updateZoneRunning(jsonBody.zoneId, jsonBody.duration)
+                            } else {
+                                this.log("Unhandled zone status " + jsonBody.subtype)
                             }
-                        }.bind(this))
-                        this.log("Finished setting up accessories" + accessories)
-                        callback(accessories)
-                    }.bind(this))
-                }.bind(this))
-        }.bind(this))
+                        } else {
+                            this.log.warn("Unhandled event type " + jsonBody.type)
+                        }
+                    });
+                } else {
+                    this.log.warn("Unsupported HTTP Method " + request.url)
+                }
+            }.bind(this));
+
+            var internal_webhook_port = this.config.internal_webhook_port || 18081
+            this.requestServer.listen(internal_webhook_port, function() {
+                platform.log("Rachio Webhook Server Listening on port " + internal_webhook_port);
+            });
+        } else {
+            this.log.warn("Webhook support is disabled. Consult the README for information on how to enable webhooks. This plugin will not update Homekit in realtime using events occuring outside of Homekit until you have configured webhooks.")
+        }
+        
+
+        if (api) {
+            // Save the API object as plugin needs to register new accessory via this object
+            this.api = api;
+
+            // Listen to event "didFinishLaunching", this means homebridge already finished loading cached accessories.
+            // Platform Plugin should only register new accessory that doesn't exist in homebridge after this event.
+            // Or start discover new accessories.
+            this.api.on('didFinishLaunching', function() {
+                platform.log("Rachio-Platform DidFinishLaunching");
+            }.bind(this));
+        }
+        this.refreshDevices()
+    }
+
+    async refreshDevices() {
+        try {
+            this.log("Refreshing devices...");
+
+            var hubs = await this.client.getDevices();
+
+            var zonesMerge = [];
+            var zones = [];
+            var devices = []
+
+            for (var i = 0; i < hubs.length; i++) {
+                var hub = hubs[i];
+                this.log(`Loading Rachio: ${hub.name} - ${hub.id}`);
+                var device = await this.client.getDevice(hub.id);
+
+                var cachedAccessory = this.accessories.filter(a => {
+                    return a.UUID == device.id;
+                });
+
+                var accessory
+                if (cachedAccessory[0]) {
+                    this.log("Device " + device.name + " is cached")
+                    accessory = cachedAccessory[0]
+                } else {
+                    accessory = this.addDevice(device)
+                }
+                accessory
+                    .getService(Service.AccessoryInformation)
+                    .setCharacteristic(Characteristic.Manufacturer, "Rachio")
+                    .setCharacteristic(Characteristic.Model, device.model)
+                    .setCharacteristic(Characteristic.SerialNumber, device.serialNumber);
+
+                var zones = await device.getZones();
+                zones = zones.sort(function(a, b) {
+                    return a.zoneNumber - b.zoneNumber
+                })
+                for (var i = 0; i < zones.length; i++) {
+                    var zone = zones[i]
+
+                    var cachedAccessory = this.accessories.filter(a => {
+                        return a.UUID == zone.id;
+                    });
+
+                    var zoneAccessory
+                    if (cachedAccessory[0]) {
+                        this.log("Zone " + zone.name + " is cached")
+                        zoneAccessory = this.updateZoneAccessory(cachedAccessory[0])
+                    } else {
+                        zoneAccessory = this.addZone(zone)
+                    }
+                }
+            }
+            this.log("Devices refreshed");
+        } catch (e) {
+            this.log.error("Failed to refresh devices.", e);
+        }
+    }
 }
 
-RachioPlatform.prototype = {
-    accessories: function (callback) {
-        var rachioController = exports.accessories = new this.api.platformAccessory("Rachio Controller", "c0dea451-25dd-4b09-b3f6-3bb0469777ea");
-        callback([rachioController])
+
+
+// Function invoked when homebridge tries to restore cached accessory.
+// Developer can configure accessory at here (like setup event handler).
+// Update current value.
+RachioPlatform.prototype.configureAccessory = function(accessory) {
+    this.log("Configure Cached Accessory: " + accessory.displayName);
+    var platform = this;
+
+    // Set the accessory to reachable if plugin can currently process the accessory,
+    // otherwise set to false and update the reachability later by invoking 
+    // accessory.updateReachability()
+    accessory.reachable = true;
+
+    this.accessories.push(accessory);
+}
+
+RachioPlatform.prototype.addDevice = function(device) {
+    this.log("Add Device: " + device.name);
+    var platform = this;
+
+    var newAccessory = new Accessory("Rachio Controller - " + device.name, device.id);
+
+    this.accessories.push(newAccessory);
+    this.api.registerPlatformAccessories("homebridge-rachio-platform", "Rachio-Platform", [newAccessory]);
+
+    return newAccessory
+}
+
+RachioPlatform.prototype.updateZoneRunning = function(zoneId, duration) {
+    let zoneAccessory = this.accessories.filter(a => {
+        return a.UUID == zoneId;
+    })[0];
+    if (zoneAccessory) {
+        service = zoneAccessory.getService(Service.Valve)
+        if (!service.getCharacteristic(Characteristic.Active).value) {
+            this.log("Updating zone status " + zoneId + " to in use and " + duration + " duration")
+            service.getCharacteristic(Characteristic.Active).setValue(1, null, {"reason" : "WEBHOOK"})
+            service.setCharacteristic(Characteristic.InUse, 1)
+            service.setCharacteristic(Characteristic.RemainingDuration, duration)
+        }
     }
-  // accessories: function (callback) {
-  //   this.log("Fetching Rachio devices...");
-  //   const accessories = []
-  //   request.get({
-  //         url: "https://api.rach.io/1/public/person/info",
-  //         headers: { "Authorization": "Bearer " + this.api_key}
-  //       }, function(err, response, body) {
-  //           var json = JSON.parse(body);
-  //           this.person_id = json["id"]
-  //           request.get({
-  //                 url: "https://api.rach.io/1/public/person/" + this.person_id,
-  //                 headers: { "Authorization": "Bearer " + this.api_key}
-  //               }, function(err, response, body) {
-  //                   var json = JSON.parse(body);
-  //                   json["devices"].forEach(function (device) {
-  //                       this.log("Setting up Rachio Controller for " + device["name"] + " (" + device["id"] + ")")
-  //                       var rachioController = exports.accessories = new this.api.platformAccessory("Rachio Controller", device["id"]);
-  //
-  //                       var rachioControllerInformationService = rachioController.getService(Service.AccessoryInformation)
-  //                       rachioControllerInformationService.setCharacteristic(Characteristic.Name, device["name"])
-  //                       rachioControllerInformationService.setCharacteristic(Characteristic.Manufacturer, "Rachio")
-  //                       rachioControllerInformationService.setCharacteristic(Characteristic.Model, device["model"])
-  //                       rachioControllerInformationService.setCharacteristic(Characteristic.SerialNumber, device["serialNumber"])
-  //
-  //                       accessories.push(rachioController)
-  //                       device['zones'].forEach(function (zone) {
-  //                           if (zone["enabled"]) {
-  //                               this.log(zone["name"])
-  //                               var sprinkler = exports.accessory = new this.api.platformAccessory(zone["name"], zone["id"]);
-  //                               var sprinklerService = sprinkler.addService(Service.Valve, "Sprinkler", )
-  //                               sprinkler
-  //                                .getService(Service.Valve)
-  //                                .setCharacteristic(Characteristic.ValveType, "1")
-  //                                .setCharacteristic(Characteristic.Name, zone["name"]);
-  //                               accessories.push(sprinkler)
-  //                           }
-  //                       }.bind(this))
-  //                       this.log("Finished setting up accessories" + accessories)
-  //                       callback(accessories)
-  //                   }.bind(this))
-  //               }.bind(this))
-  //       }.bind(this))
-  //   },
+}
+
+RachioPlatform.prototype.updateZoneStopped = function(zoneId) {
+    var zoneAccessory = this.accessories.filter(a => {
+        return a.UUID == zoneId;
+    })[0];
+    if (zoneAccessory) {
+        service = zoneAccessory.getService(Service.Valve)
+        if (service.getCharacteristic(Characteristic.Active).value) {
+            this.log("Updating zone status " + zoneId + " to not in use and 0 remaining duration")
+            service.getCharacteristic(Characteristic.Active).setValue(0, null, {"reason" : "WEBHOOK"})
+            service.setCharacteristic(Characteristic.InUse, 0)
+            service.setCharacteristic(Characteristic.RemainingDuration, 0)
+        }
+    }
+}
+
+RachioPlatform.prototype.updateZoneAccessory = function(accessory) {
+    var client = this.client
+    service = accessory.getService(Service.Valve)
+    logger = this.log
+
+    service
+        .getCharacteristic(Characteristic.InUse)
+        .on('get', function(callback) {
+            logger.debug("get InUse value for " + accessory.UUID)
+            var isWatering = client.getZone(accessory.UUID)
+                .then(zone => zone.isWatering())
+            callback(null, isWatering)
+        });
+
+    service
+        .getCharacteristic(Characteristic.Active)
+        .on('get', function(callback) {
+            logger.debug("get active value for " + accessory.UUID)
+            var isWatering = client.getZone(accessory.UUID)
+                .then(zone => zone.isWatering())
+            callback(null, isWatering)
+        });
+
+
+    service
+        .getCharacteristic(Characteristic.Active)
+        .on('set', function(newValue, callback, context) {
+            if (context.reason != "WEBHOOK") {
+                service = accessory.getService(Service.Valve)
+                if (newValue) {
+                    logger("active was set for " + accessory.UUID)
+                    duration = service.getCharacteristic(Characteristic.SetDuration).value || 300
+
+                    client.getZone(accessory.UUID)
+                        .then(zone => zone.start(duration));
+
+                    service.setCharacteristic(Characteristic.RemainingDuration, duration);
+                    service.setCharacteristic(Characteristic.InUse, 1);
+                } else {
+                    logger("active was turned off for " + accessory.UUID)
+                    service.setCharacteristic(Characteristic.RemainingDuration, 0);
+                    service.setCharacteristic(Characteristic.InUse, 0)
+
+                    client.getZone(accessory.UUID)
+                        .then(zone => zone.stop());
+                }
+            }
+            callback(null, 10);
+        });
+
+    return accessory
+}
+
+RachioPlatform.prototype.addZone = function(zone) {
+    this.log("Adding Zone: " + zone.name);
+    this.log.debug(zone)
+    var newAccessory = new Accessory(zone.name, zone.id);
+
+    var sprinklerService = newAccessory.addService(Service.Valve, zone.name)
+    newAccessory
+        .getService(Service.Valve)
+        .setCharacteristic(Characteristic.ValveType, Characteristic.ValveType.IRRIGATION)
+        .setCharacteristic(Characteristic.Name, zone.name);
+
+    newAccessory = this.updateZoneAccessory(newAccessory)
+
+    service = newAccessory.getService(Service.Valve)
+    if (service.getCharacteristic(Characteristic.SetDuration).value == 0) {
+        this.log.debug("Setting a default duration to " + 300)
+        service.setCharacteristic(Characteristic.SetDuration, 300)
+        service.setCharacteristic(Characteristic.RemainingDuration, 0)
+    }
+    
+    this.accessories.push(newAccessory);
+    this.api.registerPlatformAccessories("homebridge-rachio-platform", "Rachio-Platform", [newAccessory]);
+
+    return newAccessory
+}
+
+RachioPlatform.prototype.updateAccessoriesReachability = function() {
+    this.log("Update Reachability");
+    for (var index in this.accessories) {
+        var accessory = this.accessories[index];
+        accessory.updateReachability(false);
+    }
+}
+
+// Sample function to show how developer can remove accessory dynamically from outside event
+RachioPlatform.prototype.removeAccessory = function() {
+    this.log("Remove Accessory");
+    this.api.unregisterPlatformAccessories("hhomebridge-rachio-platform", "Rachio-Platform", this.accessories);
+
+    this.accessories = [];
 }
