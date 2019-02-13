@@ -41,14 +41,23 @@ class RachioPlatform {
 
         if (this.config.external_webhook_address && this.config.internal_webhook_port) {
             this.requestServer = http.createServer(function(request, response) {
-                if (request.method == "POST") {
+                if (request.method == "POST" && request.url == "/") {
             
                     let body = [];
                     request.on('data', (chunk) => {
                         body.push(chunk);
                     }).on('end', () => {
                         body = Buffer.concat(body).toString().trim();
-                        var jsonBody = JSON.parse(body);
+                        try {
+                            var jsonBody = JSON.parse(body);
+                        }
+                        catch (err){
+                            this.log("Error parsing request " + err)
+                            response.writeHead(404);
+                            response.end();
+                            return
+                        }
+                        
                         response.writeHead(204);
                         response.end();
                         this.log.debug(jsonBody)
@@ -67,7 +76,9 @@ class RachioPlatform {
                         }
                     });
                 } else {
-                    this.log.warn("Unsupported HTTP Method " + request.url)
+                    this.log.warn("Unsupported HTTP Request " + request.method + " " + request.url)
+                    response.writeHead(404);
+                    response.end();
                 }
             }.bind(this));
 
