@@ -41,7 +41,13 @@ class RachioPlatform {
 
         if (this.config.external_webhook_address && this.config.internal_webhook_port) {
             this.requestServer = http.createServer(function(request, response) {
-                if (request.method == "POST" && request.url == "/") {
+                if (request.method == "GET" && request.url == "/test") {
+                    this.log("Test received. Webhooks are successfully configured!")
+                    response.writeHead(200);
+                    response.write("Webhooks are configured correctly!");
+                    response.end();
+                }
+                else if (request.method == "POST" && request.url == "/") {
             
                     let body = [];
                     request.on('data', (chunk) => {
@@ -83,8 +89,9 @@ class RachioPlatform {
             }.bind(this));
 
             var internal_webhook_port = this.config.internal_webhook_port || 18081
+            var external_webhook_address = this.config.external_webhook_address
             this.requestServer.listen(internal_webhook_port, function() {
-                platform.log("Rachio Webhook Server Listening on port " + internal_webhook_port);
+                platform.log("Rachio Webhook Server Listening on port " + internal_webhook_port + ". Ensure that " + external_webhook_address + " is forwarding to this port.");
             });
         } else {
             this.log.warn("Webhook support is disabled. Consult the README for information on how to enable webhooks. This plugin will not update Homekit in realtime using events occuring outside of Homekit until you have configured webhooks.")
@@ -156,6 +163,7 @@ class RachioPlatform {
                         zoneAccessory = this.addZone(zone)
                     }
                 }
+                this.configureWebhooks(this.config.external_webhook_address, device.id)
             }
             this.log("Devices refreshed");
         } catch (e) {
@@ -165,6 +173,52 @@ class RachioPlatform {
 }
 
 
+RachioPlatform.prototype.configureWebhooks = function(external_webhook_address, device_id) {
+    this.log.info("Configuring rachio webhooks for " + device_id)
+    request.get({
+              url: "https://api.rach.io/1/public/notification/"+device_id+"/webhook",
+              headers: { "Authorization": "Bearer " + this.config.api_key}
+            }, function(err, response, body) {
+                var webhooks = JSON.parse(body);
+                var key = "Homebridge-" + device_id
+                
+                this.log.debug(webhooks)
+                
+                var webhook = webhooks.filter(a => {
+                    return a.externalId == key;
+                });
+                
+                if (webhook[0]) {
+                    this.log("Updating Webhook for " + external_webhook_address)
+                    request.put({
+                              url: "https://api.rach.io/1/public/notification/webhook",
+                              headers: { "Authorization": "Bearer " + this.config.api_key, "Content-Type": "application/json"},
+                              body: {"id": webhook[0].id, "externalId": key, "url": external_webhook_address, "eventTypes": [{"id": 5}, {"id": 10}], "device" : {"id": device_id}},
+                              json: true
+                            }, function(err, response, body) {
+                                this.log.debug(response.statusCode)
+                                this.log.debug(body)
+                                if (response.statusCode == 200) {
+                                    this.log("Successfully updated webhook for " + external_webhook_address + ". Navigate to " + external_webhook_address + "/test to ensure port forwarding is configured correctly.")
+                                }
+                        }.bind(this))
+                } else {
+                    this.log("Configuring new Webhook for " + external_webhook_address)
+                    request.post({
+                              url: "https://api.rach.io/1/public/notification/webhook",
+                              headers: { "Authorization": "Bearer " + this.config.api_key, "Content-Type": "application/json"},
+                              body: {"externalId": key, "url": external_webhook_address, "eventTypes": [{"id": 5}, {"id": 10}], "device" : {"id": device_id}},
+                              json: true
+                            }, function(err, response, body) {
+                                this.log.debug(response.statusCode)
+                                this.log.debug(body)
+                                if (response.statusCode == 200) {
+                                    this.log("Successfully added webhook for " + external_webhook_address + ". Navigate to " + external_webhook_address + "/test to ensure port forwarding is configured correctly.")
+                                }
+                        }.bind(this))
+                }
+            }.bind(this))
+  }
 
 // Function invoked when homebridge tries to restore cached accessory.
 // Developer can configure accessory at here (like setup event handler).
