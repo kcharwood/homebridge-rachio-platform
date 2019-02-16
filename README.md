@@ -9,11 +9,13 @@ Rachio plugin for Homebridge
 3. Update your configuration file. See `sample-config.json` snippet below.
 
 # Webhook Support
-`homebridge-rachio-platform` uses webhooks to update Homekit accessory status in real-time when a Rachio schedule is executing. If webhooks are not enabled, Homekit will not update when a Rachio schedule is running.
+`homebridge-rachio-platform` uses webhooks to update Homekit accessory status in real-time when a Rachio schedule is executing. Due to how Rachio scheduling works, webhooks are required in order for this plugin to work correctly.
 
 In order to support webhooks, you must know your external network IP address, and have the ability to open/forward a port from that IP address to your internal Homebridge server (typically a modem or router on your local network). Please do not file issues to this repository related to network configuration issues.
 
-If no webhook information is provided in the config file, Homekit accessory status will not update if you interact with the Rachio controller outside of Homekit.
+If no webhook information is provided in the config file, the plugin will error, and setup will not complete.
+
+Consult the log during setup. The plugin will print out a URL that can be used to test and confirm port forwarding is setup correctly.
 
 # API Key
 
