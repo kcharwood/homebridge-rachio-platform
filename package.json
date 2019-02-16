@@ -1,6 +1,6 @@
 {
-  "name": "homebridge-rachio-sprinkler",
-  "version": "0.1.0",
+  "name": "homebridge-rachio-platform",
+  "version": "1.0.0",
   "description": "Rachio support for Homebridge: https://github.com/nfarina/homebridge",
   "license": "MIT",
   "keywords": [
@@ -8,10 +8,10 @@
   ],
   "repository": {
     "type": "git",
-    "url": "git://github.com/kcharwood/homebridge-rachio-sprikler.git"
+    "url": "git://github.com/kcharwood/homebridge-rachio-platform.git"
   },
   "bugs": {
-    "url": "http://github.com/nfarina/homebridge-rachio-sprinkler/issues"
+    "url": "http://github.com/nfarina/homebridge-rachio-platform/issues"
   },
   "engines": {
     "node": ">=0.12.0",
