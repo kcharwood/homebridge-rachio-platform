@@ -88,7 +88,7 @@ class RachioPlatform {
                 }
             }.bind(this));
 
-            var internal_webhook_port = this.config.internal_webhook_port || 18081
+            var internal_webhook_port = this.config.internal_webhook_port
             var external_webhook_address = this.config.external_webhook_address
             this.requestServer.listen(internal_webhook_port, function() {
                 platform.log("Rachio Webhook Server Listening on port " + internal_webhook_port + ". Ensure that " + external_webhook_address + " is forwarding to this port.");
@@ -180,7 +180,7 @@ RachioPlatform.prototype.configureWebhooks = function(external_webhook_address, 
               headers: { "Authorization": "Bearer " + this.config.api_key}
             }, function(err, response, body) {
                 var webhooks = JSON.parse(body);
-                var key = "Homebridge-" + device_id
+                var key = "Homebridge-" + this.config.name
                 
                 this.log.debug(webhooks)
                 
