@@ -40,6 +40,7 @@ class RachioPlatform {
         this.client = new RachioClient(this.config.api_key);
 
         if (this.config.external_webhook_address && this.config.internal_webhook_port) {
+            this.webhook_key = "Homebridge-" + this.config.name
             this.requestServer = http.createServer(function(request, response) {
                 if (request.method == "GET" && request.url == "/test") {
                     this.log("Test received. Webhooks are successfully configured!")
@@ -67,19 +68,24 @@ class RachioPlatform {
                         response.writeHead(204);
                         response.end();
                         this.log.debug(jsonBody)
-                        if (jsonBody.type == "ZONE_STATUS") {
-                            if (jsonBody.subType == "ZONE_STOPPED" || jsonBody.subType == "ZONE_COMPLETED") {
-                                this.log("Zone Stop Webhook Received for " + jsonBody.zoneId)
-                                this.updateZoneStopped(jsonBody.zoneId)
-                            } else if  (jsonBody.subType == "ZONE_STARTED") {
-                                this.log("Zone Started Webhook Received for " + jsonBody.zoneId + " for duration " + jsonBody.duration)
-                                this.updateZoneRunning(jsonBody.zoneId, jsonBody.duration)
+                        if (jsonBody.externalId == this.webhook_key) {
+                            if (jsonBody.type == "ZONE_STATUS") {
+                                if (jsonBody.subType == "ZONE_STOPPED" || jsonBody.subType == "ZONE_COMPLETED") {
+                                    this.log("Zone Stop Webhook Received for " + jsonBody.zoneId)
+                                    this.updateZoneStopped(jsonBody.zoneId)
+                                } else if  (jsonBody.subType == "ZONE_STARTED") {
+                                    this.log("Zone Started Webhook Received for " + jsonBody.zoneId + " for duration " + jsonBody.duration)
+                                    this.updateZoneRunning(jsonBody.zoneId, jsonBody.duration)
+                                } else {
+                                    this.log("Unhandled zone status " + jsonBody.subtype)
+                                }
                             } else {
-                                this.log("Unhandled zone status " + jsonBody.subtype)
+                                this.log.warn("Unhandled event type " + jsonBody.type)
                             }
                         } else {
-                            this.log.warn("Unhandled event type " + jsonBody.type)
+                            this.log.warn("Webhook Recieved from an unknown external id " + jsonBody.externalId)
                         }
+
                     });
                 } else {
                     this.log.warn("Unsupported HTTP Request " + request.method + " " + request.url)
@@ -180,7 +186,7 @@ RachioPlatform.prototype.configureWebhooks = function(external_webhook_address, 
               headers: { "Authorization": "Bearer " + this.config.api_key}
             }, function(err, response, body) {
                 var webhooks = JSON.parse(body);
-                var key = "Homebridge-" + this.config.name
+                var key = this.webhook_key
                 
                 this.log.debug(webhooks)
                 
