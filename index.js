@@ -220,6 +220,17 @@ RachioPlatform.prototype.configureWebhooks = function(external_webhook_address, 
             }.bind(this))
   }
 
+RachioPlatform.prototype.updateRemainingTimeForService = function(service) {
+    this.log.debug("updateRemainingTimeForService")
+    remainingDuration = service.getCharacteristic(Characteristic.RemainingDuration).value
+    setDuration = Math.max(remainingDuration - 1, 0)
+    this.log.debug("Remaining: " + remainingDuration + " Set Duration: " + setDuration)
+    if (remainingDuration != setDuration) {
+        this.log.debug("Setting Remaining Duration to " + setDuration)
+        service.setCharacteristic(Characteristic.RemainingDuration, setDuration, {"reason" : "TIMER"})
+    }
+}
+
 // Function invoked when homebridge tries to restore cached accessory.
 // Developer can configure accessory at here (like setup event handler).
 // Update current value.
@@ -281,6 +292,7 @@ RachioPlatform.prototype.updateZoneAccessory = function(accessory) {
     var client = this.client
     service = accessory.getService(Service.Valve)
     logger = this.log
+    that = this
 
     service
         .getCharacteristic(Characteristic.InUse)
@@ -325,6 +337,17 @@ RachioPlatform.prototype.updateZoneAccessory = function(accessory) {
                 }
             }
             callback(null, 10);
+        });
+
+    service
+        .getCharacteristic(Characteristic.RemainingDuration)
+        .on('set', function(newValue, callback, context) {
+            logger.debug("Setting Remaining Duration: " + newValue)
+            if (newValue > 0) {
+                logger.debug("Scheduling timer to reduce remaining duration")
+                setTimeout(that.updateRemainingTimeForService.bind(that, service), 1000);
+            }
+            callback()
         });
 
     return accessory
