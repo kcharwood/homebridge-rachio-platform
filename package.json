@@ -1,6 +1,6 @@
 {
   "name": "homebridge-rachio-platform",
-  "version": "1.0.0-beta.2",
+  "version": "1.0.0-beta.3",
   "description": "Rachio support for Homebridge: https://github.com/nfarina/homebridge",
   "license": "MIT",
   "keywords": [
