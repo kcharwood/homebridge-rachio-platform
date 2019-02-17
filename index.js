@@ -164,7 +164,7 @@ class RachioPlatform {
                     var zoneAccessory
                     if (cachedAccessory[0]) {
                         this.log("Zone " + zone.name + " is cached")
-                        zoneAccessory = this.updateZoneAccessory(cachedAccessory[0])
+                        zoneAccessory = this.updateZoneAccessory(cachedAccessory[0], zone)
                     } else {
                         zoneAccessory = this.addZone(zone)
                     }
@@ -294,8 +294,15 @@ RachioPlatform.prototype.updateZoneStopped = function(zoneId) {
     }
 }
 
-RachioPlatform.prototype.updateZoneAccessory = function(accessory) {
+RachioPlatform.prototype.updateZoneAccessory = function(accessory, zone) {
     var client = this.client
+
+    accessory
+        .getService(Service.AccessoryInformation)
+        .setCharacteristic(Characteristic.Manufacturer, "Rachio")
+        .setCharacteristic(Characteristic.Model, zone.customNozzle.name)
+        .setCharacteristic(Characteristic.SerialNumber, zone.id);
+
     service = accessory.getService(Service.Valve)
     logger = this.log
     that = this
@@ -370,7 +377,7 @@ RachioPlatform.prototype.addZone = function(zone) {
         .setCharacteristic(Characteristic.ValveType, Characteristic.ValveType.IRRIGATION)
         .setCharacteristic(Characteristic.Name, zone.name);
 
-    newAccessory = this.updateZoneAccessory(newAccessory)
+    newAccessory = this.updateZoneAccessory(newAccessory, zone)
 
     service = newAccessory.getService(Service.Valve)
     if (service.getCharacteristic(Characteristic.SetDuration).value == 0) {
