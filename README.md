@@ -3,7 +3,7 @@
 Rachio plugin for Homebridge
 
 <p align="center">
-  <img src="https://github.com/kcharwood/homebridge-rachio-platform/blob/master/docs/example.gif?raw=true">
+  <img width=300 src="https://github.com/kcharwood/homebridge-rachio-platform/blob/master/docs/example.gif?raw=true">
 </p>
 
 
