@@ -156,7 +156,6 @@ class RachioPlatform {
                 })
                 for (var i = 0; i < zones.length; i++) {
                     var zone = zones[i]
-
                     var cachedAccessory = this.accessories.filter(a => {
                         return a.UUID == zone.id;
                     });
@@ -164,9 +163,16 @@ class RachioPlatform {
                     var zoneAccessory
                     if (cachedAccessory[0]) {
                         this.log("Zone " + zone.name + " is cached")
-                        zoneAccessory = this.updateZoneAccessory(cachedAccessory[0], zone)
-                    } else {
+                        if (zone.enabled) {
+                            zoneAccessory = this.updateZoneAccessory(cachedAccessory[0], zone)
+                        } else {
+                            this.log("Removing Zone Number " + zone.zoneNumber + " because it is disabled.")
+                            this.api.unregisterPlatformAccessories("homebridge-rachio-platform", "Rachio-Platform", [cachedAccessory[0]]);
+                        }
+                    } else if (zone.enabled){
                         zoneAccessory = this.addZone(zone)
+                    } else {
+                        this.log("Skipping Zone Number " + zone.zoneNumber + " because it is disabled.")
                     }
                 }
                 this.configureWebhooks(this.config.external_webhook_address, device.id)
@@ -398,12 +404,4 @@ RachioPlatform.prototype.updateAccessoriesReachability = function() {
         var accessory = this.accessories[index];
         accessory.updateReachability(false);
     }
-}
-
-// Sample function to show how developer can remove accessory dynamically from outside event
-RachioPlatform.prototype.removeAccessory = function() {
-    this.log("Remove Accessory");
-    this.api.unregisterPlatformAccessories("hhomebridge-rachio-platform", "Rachio-Platform", this.accessories);
-
-    this.accessories = [];
 }
