@@ -10,7 +10,7 @@ Rachio plugin for Homebridge
 # Installation
 
 1. Install homebridge using: `npm install -g homebridge`
-2. Install this plugin using: `npm install -g homebridge-rachio-platform`
+2. Install this plugin using: `npm install -g homebridge-rachio-platform@beta`
 3. Update your configuration file. See `sample-config.json` snippet below.
 
 # Webhook Support
