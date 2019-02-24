@@ -1,6 +1,7 @@
 var request = require("request");
 var http = require('http');
 const RachioClient = require("rachio");
+var urlencode = require("urlencode");
 
 var Service, Characteristic;
 
@@ -200,6 +201,7 @@ RachioPlatform.prototype.configureWebhooks = function(external_webhook_address, 
                     return a.externalId == key;
                 });
                 
+                var test_webhook_url = "https://httpbin.org/redirect-to?url=" + urlencode(external_webhook_address + "/test")
                 if (webhook[0]) {
                     this.log("Updating Webhook for " + external_webhook_address)
                     request.put({
@@ -211,7 +213,7 @@ RachioPlatform.prototype.configureWebhooks = function(external_webhook_address, 
                                 this.log.debug(response.statusCode)
                                 this.log.debug(body)
                                 if (response.statusCode == 200) {
-                                    this.log("Successfully updated webhook for " + external_webhook_address + ". Navigate to " + external_webhook_address + "/test to ensure port forwarding is configured correctly.")
+                                    this.log("Successfully updated webhook for " + external_webhook_address + ". Navigate to " + test_webhook_url + " to ensure port forwarding is configured correctly.")
                                 }
                         }.bind(this))
                 } else {
@@ -225,7 +227,7 @@ RachioPlatform.prototype.configureWebhooks = function(external_webhook_address, 
                                 this.log.debug(response.statusCode)
                                 this.log.debug(body)
                                 if (response.statusCode == 200) {
-                                    this.log("Successfully added webhook for " + external_webhook_address + ". Navigate to " + external_webhook_address + "/test to ensure port forwarding is configured correctly.")
+                                    this.log("Successfully added webhook for " + external_webhook_address + ". Navigate to " + test_webhook_url + " to ensure port forwarding is configured correctly.")
                                 }
                         }.bind(this))
                 }
