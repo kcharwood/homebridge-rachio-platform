@@ -2,6 +2,11 @@
 
 Rachio plugin for Homebridge
 
+<p align="center">
+  <img src="https://github.com/kcharwood/homebridge-rachio-platform/blob/master/docs/example.gif?raw=true">
+</p>
+
+
 # Installation
 
 1. Install homebridge using: `npm install -g homebridge`
