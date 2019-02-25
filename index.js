@@ -7,6 +7,8 @@ var Service, Characteristic;
 
 var Accessory, Service, Characteristic, UUIDGen;
 
+var multi;
+
 module.exports = function(homebridge) {
     console.log("homebridge API version: " + homebridge.version);
 
@@ -344,7 +346,20 @@ RachioPlatform.prototype.updateZoneAccessory = function(accessory, zone) {
                     duration = service.getCharacteristic(Characteristic.SetDuration).value || 300
 
                     client.getZone(accessory.UUID)
-                        .then(zone => zone.start(duration));
+                        .then(zone =>  {
+                            if (multi == null) {
+                                multi = client.multiZone()
+                            }
+                            multi.add(zone, duration)
+                        })
+                        .then(_ => {
+                            setTimeout(() => {
+                                if (multi != null) {
+                                    multi.start()
+                                    multi = null
+                                }
+                            }, 1000);
+                        });
 
                     service.setCharacteristic(Characteristic.RemainingDuration, duration);
                     service.setCharacteristic(Characteristic.InUse, 1);
