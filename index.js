@@ -317,26 +317,25 @@ RachioPlatform.prototype.updateZoneAccessory = function(accessory, zone) {
 
     service
         .getCharacteristic(Characteristic.InUse)
-        .on('get', function(callback) {
+        .on('get', async function(callback) {
             logger.debug("get InUse value for " + accessory.UUID)
-            var isWatering = client.getZone(accessory.UUID)
+            var isWatering = await client.getZone(accessory.UUID)
                 .then(zone => zone.isWatering())
-            callback(null, isWatering)
+            callback(null, isWatering ? 1 : 0)
         });
 
     service
         .getCharacteristic(Characteristic.Active)
-        .on('get', function(callback) {
+        .on('get', async function(callback) {
             logger.debug("get active value for " + accessory.UUID)
-            var isWatering = client.getZone(accessory.UUID)
+            var isWatering = await client.getZone(accessory.UUID)
                 .then(zone => zone.isWatering())
-            callback(null, isWatering)
+            callback(null, isWatering ? 1 : 0)
         });
-
 
     service
         .getCharacteristic(Characteristic.Active)
-        .on('set', function(newValue, callback, context) {
+        .on('set', function(newValue, callback, context = {}) {
             if (context.reason != "WEBHOOK") {
                 service = accessory.getService(Service.Valve)
                 if (newValue) {
@@ -357,18 +356,18 @@ RachioPlatform.prototype.updateZoneAccessory = function(accessory, zone) {
                         .then(zone => zone.stop());
                 }
             }
-            callback(null, 10);
+            callback(null);
         });
 
     service
         .getCharacteristic(Characteristic.RemainingDuration)
-        .on('set', function(newValue, callback, context) {
+        .on('set', function(newValue, callback, context = {}) {
             logger.debug("Setting Remaining Duration: " + newValue)
             if (newValue > 0) {
                 logger.debug("Scheduling timer to reduce remaining duration")
                 setTimeout(that.updateRemainingTimeForService.bind(that, service), 1000);
             }
-            callback()
+            callback(null)
         });
 
     return accessory
