@@ -317,18 +317,18 @@ RachioPlatform.prototype.updateZoneAccessory = function(accessory, zone) {
 
     service
         .getCharacteristic(Characteristic.InUse)
-        .on('get', function(callback) {
+        .on('get', async function(callback) {
             logger.debug("get InUse value for " + accessory.UUID)
-            var isWatering = client.getZone(accessory.UUID)
+            var isWatering = await client.getZone(accessory.UUID)
                 .then(zone => zone.isWatering())
             callback(null, isWatering ? 1 : 0)
         });
 
     service
         .getCharacteristic(Characteristic.Active)
-        .on('get', function(callback) {
+        .on('get', async function(callback) {
             logger.debug("get active value for " + accessory.UUID)
-            var isWatering = client.getZone(accessory.UUID)
+            var isWatering = await client.getZone(accessory.UUID)
                 .then(zone => zone.isWatering())
             callback(null, isWatering ? 1 : 0)
         });
