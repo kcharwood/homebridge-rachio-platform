@@ -33,6 +33,7 @@ class RachioPlatform {
         this.log = log;
         this.config = config;
         this.accessories = [];
+        this.activeZones = {}; // map of active zones across all controllers, keyed by the zone's id
 
         if (!this.config.api_key) {
             this.log.error("api_key is required in order to communicate with the rachio API")
@@ -176,6 +177,12 @@ class RachioPlatform {
                         this.log("Skipping Zone Number " + zone.zoneNumber + " because it is disabled.")
                     }
                 }
+
+                // Determine which zone (if any) is active for this Rachio controller
+                const activeZone = await device.getActiveZone()
+                this.log.debug("active zone for device " + device.id + ": " + (activeZone && activeZone.id))
+                if (activeZone) this.activeZones[activeZone.id] = true
+
                 this.configureWebhooks(this.config.external_webhook_address, device.id)
             }
             this.log("Devices refreshed");
@@ -318,25 +325,22 @@ RachioPlatform.prototype.updateZoneAccessory = function(accessory, zone) {
     service
         .getCharacteristic(Characteristic.InUse)
         .on('get', function(callback) {
-            logger.debug("get InUse value for " + accessory.UUID)
-            var isWatering = client.getZone(accessory.UUID)
-                .then(zone => zone.isWatering())
-            callback(null, isWatering)
+            const isActive = that.activeZones[accessory.UUID]
+            logger.debug("get InUse value for " + accessory.UUID + ". active: " + !!isActive)
+            callback(null, isActive ? 1 : 0)
         });
 
     service
         .getCharacteristic(Characteristic.Active)
         .on('get', function(callback) {
-            logger.debug("get active value for " + accessory.UUID)
-            var isWatering = client.getZone(accessory.UUID)
-                .then(zone => zone.isWatering())
-            callback(null, isWatering)
+            const isActive = that.activeZones[accessory.UUID]
+            logger.debug("get active value for " + accessory.UUID  + ". active: " + !!isActive)
+            callback(null, isActive ? 1 : 0)
         });
-
 
     service
         .getCharacteristic(Characteristic.Active)
-        .on('set', function(newValue, callback, context) {
+        .on('set', function(newValue, callback, context = {}) {
             if (context.reason != "WEBHOOK") {
                 service = accessory.getService(Service.Valve)
                 if (newValue) {
@@ -357,18 +361,26 @@ RachioPlatform.prototype.updateZoneAccessory = function(accessory, zone) {
                         .then(zone => zone.stop());
                 }
             }
-            callback(null, 10);
+
+            // Update activeZones cache
+            if (newValue) {
+                that.activeZones[zone.id] = true
+            } else {
+                delete that.activeZones[zone.id]
+            }
+
+            callback(null);
         });
 
     service
         .getCharacteristic(Characteristic.RemainingDuration)
-        .on('set', function(newValue, callback, context) {
+        .on('set', function(newValue, callback, context = {}) {
             logger.debug("Setting Remaining Duration: " + newValue)
             if (newValue > 0) {
                 logger.debug("Scheduling timer to reduce remaining duration")
                 setTimeout(that.updateRemainingTimeForService.bind(that, service), 1000);
             }
-            callback()
+            callback(null)
         });
 
     return accessory
