@@ -33,6 +33,7 @@ class RachioPlatform {
         this.log = log;
         this.config = config;
         this.accessories = [];
+        this.activeZones = {}; // map of active zones across all controllers, keyed by the zone's id
 
         if (!this.config.api_key) {
             this.log.error("api_key is required in order to communicate with the rachio API")
@@ -176,6 +177,12 @@ class RachioPlatform {
                         this.log("Skipping Zone Number " + zone.zoneNumber + " because it is disabled.")
                     }
                 }
+
+                // Determine which zone (if any) is active for this Rachio controller
+                const activeZone = await device.getActiveZone()
+                this.log.debug("active zone for device " + device.id + ": " + (activeZone && activeZone.id))
+                if (activeZone) this.activeZones[activeZone.id] = true
+
                 this.configureWebhooks(this.config.external_webhook_address, device.id)
             }
             this.log("Devices refreshed");
@@ -319,8 +326,12 @@ RachioPlatform.prototype.updateZoneAccessory = function(accessory, zone) {
         .getCharacteristic(Characteristic.InUse)
         .on('get', async function(callback) {
             logger.debug("get InUse value for " + accessory.UUID)
-            var isWatering = await client.getZone(accessory.UUID)
-                .then(zone => zone.isWatering())
+            logger.debug("zoneId " + zone.id)
+            const isWatering = this.activeZones[zone.id]
+
+            // var isWatering = await client.getZone(accessory.UUID)
+            //     .then(zone => zone.isWatering())
+
             callback(null, isWatering ? 1 : 0)
         });
 
@@ -328,8 +339,12 @@ RachioPlatform.prototype.updateZoneAccessory = function(accessory, zone) {
         .getCharacteristic(Characteristic.Active)
         .on('get', async function(callback) {
             logger.debug("get active value for " + accessory.UUID)
-            var isWatering = await client.getZone(accessory.UUID)
-                .then(zone => zone.isWatering())
+            logger.debug("zoneId " + zone.id)
+            const isWatering = this.activeZones[zone.id]
+
+            // var isWatering = await client.getZone(accessory.UUID)
+            //     .then(zone => zone.isWatering())
+
             callback(null, isWatering ? 1 : 0)
         });
 
@@ -356,6 +371,14 @@ RachioPlatform.prototype.updateZoneAccessory = function(accessory, zone) {
                         .then(zone => zone.stop());
                 }
             }
+
+            // Update activeZones cache
+            if (newValue) {
+                this.activeZones[zone.id] = true
+            } else {
+                delete this.activeZones[zone.id]
+            }
+
             callback(null);
         });
 
