@@ -324,28 +324,18 @@ RachioPlatform.prototype.updateZoneAccessory = function(accessory, zone) {
 
     service
         .getCharacteristic(Characteristic.InUse)
-        .on('get', async function(callback) {
-            logger.debug("get InUse value for " + accessory.UUID)
-            logger.debug("zoneId " + zone.id)
-            const isWatering = this.activeZones[zone.id]
-
-            // var isWatering = await client.getZone(accessory.UUID)
-            //     .then(zone => zone.isWatering())
-
-            callback(null, isWatering ? 1 : 0)
+        .on('get', function(callback) {
+            const isActive = that.activeZones[accessory.UUID]
+            logger.debug("get InUse value for " + accessory.UUID + ". active: " + !!isActive)
+            callback(null, isActive ? 1 : 0)
         });
 
     service
         .getCharacteristic(Characteristic.Active)
-        .on('get', async function(callback) {
-            logger.debug("get active value for " + accessory.UUID)
-            logger.debug("zoneId " + zone.id)
-            const isWatering = this.activeZones[zone.id]
-
-            // var isWatering = await client.getZone(accessory.UUID)
-            //     .then(zone => zone.isWatering())
-
-            callback(null, isWatering ? 1 : 0)
+        .on('get', function(callback) {
+            const isActive = that.activeZones[accessory.UUID]
+            logger.debug("get active value for " + accessory.UUID  + ". active: " + !!isActive)
+            callback(null, isActive ? 1 : 0)
         });
 
     service
@@ -374,9 +364,9 @@ RachioPlatform.prototype.updateZoneAccessory = function(accessory, zone) {
 
             // Update activeZones cache
             if (newValue) {
-                this.activeZones[zone.id] = true
+                that.activeZones[zone.id] = true
             } else {
-                delete this.activeZones[zone.id]
+                delete that.activeZones[zone.id]
             }
 
             callback(null);
