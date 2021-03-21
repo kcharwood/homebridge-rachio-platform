@@ -20,6 +20,8 @@ In order to support webhooks, you must know your external network IP address, an
 
 Consult the log during setup. The plugin will print out a URL that can be used to test and confirm port forwarding is set up correctly.
 
+If you see log messages like `Webhook received from an unknown external id`, you may set the `clear_previous_webhooks` flag to `true` to remove previous webhooks before creating or updating the webhook for this plugin. Note: this will clear all webhooks tied to your Rachio API key, so be careful if you rely on Rachio webhooks apart from this plugin.
+
 # API Key
 
 You can acquire your API key from Rachio using this [documentation](https://rachio.readme.io/docs/authentication).
@@ -33,6 +35,6 @@ You can acquire your API key from Rachio using this [documentation](https://rach
   "api_key": "{API_KEY_OBTAINED_FROM_RACHIO}",
   "internal_webhook_port": 27546, 
   "external_webhook_address": "http://173.452.132.342:12453",
-  "clear_previous_webhooks": true
+  "clear_previous_webhooks": false
 }
 ```
